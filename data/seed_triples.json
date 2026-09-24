@@ -1,0 +1,13 @@
+[
+  {"subject": "Alice", "relation": "works at", "object": "Acme"},
+  {"subject": "Alice", "relation": "has role", "object": "Senior Engineer"},
+  {"subject": "Alice", "relation": "works on", "object": "Project Phoenix"},
+  {"subject": "Bob", "relation": "works at", "object": "Acme"},
+  {"subject": "Bob", "relation": "manages", "object": "Alice"},
+  {"subject": "Carol", "relation": "works at", "object": "Globex"},
+  {"subject": "Acme", "relation": "located in", "object": "Berlin"},
+  {"subject": "Acme", "relation": "produces", "object": "Widget X"},
+  {"subject": "Globex", "relation": "competes with", "object": "Acme"},
+  {"subject": "Globex", "relation": "located in", "object": "Munich"},
+  {"subject": "Project Phoenix", "relation": "uses", "object": "Widget X"}
+]
