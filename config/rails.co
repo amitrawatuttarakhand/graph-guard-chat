@@ -1,0 +1,20 @@
+define bot refuse to respond
+  "Sorry, I can't help with that request."
+
+define bot no kg data
+  "I couldn't find anything about that in the knowledge graph."
+
+define flow check input safety
+  $allowed = execute check_input_safety(text=$user_message)
+  if not $allowed
+    bot refuse to respond
+    stop
+
+define flow retrieve kg context
+  $relevant_chunks = execute retrieve_kg_context(query=$user_message)
+  if not $relevant_chunks
+    bot no kg data
+    stop
+
+define flow mask pii output
+  $bot_message = execute mask_pii(text=$bot_message)
