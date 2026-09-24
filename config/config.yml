@@ -1,0 +1,24 @@
+models:
+  - type: main
+    engine: openai              # OpenRouter is OpenAI-compatible
+    model: openai/gpt-4o-mini   # any OpenRouter model id, e.g. anthropic/claude-3.5-sonnet
+    api_key_env_var: OPENROUTER_API_KEY
+    parameters:
+      base_url: https://openrouter.ai/api/v1
+
+instructions:
+  - type: general
+    content: |
+      You are a knowledge-graph assistant. Answer ONLY from the facts provided
+      as relevant context (each fact reads: SUBJECT RELATION OBJECT).
+      Combine facts to answer multi-hop questions. If the facts do not
+      contain the answer, say you don't know. Never invent facts.
+
+rails:
+  input:
+    flows:
+      - check input safety
+      - retrieve kg context
+  output:
+    flows:
+      - mask pii output
