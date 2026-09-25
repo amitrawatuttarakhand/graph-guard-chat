@@ -9,6 +9,7 @@ load_dotenv()
 
 from .guardrails import build_rails  # noqa: E402
 from .kg import kg  # noqa: E402
+from .store import SupabaseStore, get_supabase_client  # noqa: E402
 
 SEED = Path(__file__).resolve().parent.parent / "data" / "seed_triples.json"
 
@@ -16,6 +17,12 @@ SEED = Path(__file__).resolve().parent.parent / "data" / "seed_triples.json"
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     kg.load_json(SEED)
+    app.state.store = None
+    sb = get_supabase_client()
+    if sb:
+        app.state.store = SupabaseStore(sb)
+        for t in app.state.store.load_all():
+            kg.add_triple(t["subject"], t["relation"], t["object"])
     app.state.rails = build_rails()
     yield
 
@@ -42,7 +49,12 @@ class Triple(BaseModel):
 @app.get("/health")
 def health():
     g = kg.export()
-    return {"status": "ok", "nodes": len(g["nodes"]), "edges": len(g["edges"])}
+    return {
+        "status": "ok",
+        "nodes": len(g["nodes"]),
+        "edges": len(g["edges"]),
+        "persistent": app.state.store is not None,
+    }
 
 
 @app.post("/chat")
@@ -73,4 +85,6 @@ def neighbors(entity: str, hops: int = 1):
 def add_triples(triples: list[Triple]):
     for t in triples:
         kg.add_triple(t.subject, t.relation, t.object)
-    return {"added": len(triples)}
+        if app.state.store:
+            app.state.store.add_triple(t.subject, t.relation, t.object)
+    return {"added": len(triples), "persistent": app.state.store is not None}
