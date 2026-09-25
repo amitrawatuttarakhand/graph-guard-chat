@@ -18,6 +18,10 @@ def secret(name: str, default: str = "") -> str:
 
 if secret("OPENROUTER_API_KEY"):
     os.environ["OPENROUTER_API_KEY"] = secret("OPENROUTER_API_KEY")
+if secret("SUPABASE_URL"):
+    os.environ["SUPABASE_URL"] = secret("SUPABASE_URL")
+if secret("SUPABASE_KEY"):
+    os.environ["SUPABASE_KEY"] = secret("SUPABASE_KEY")
 API_URL = os.getenv("API_URL") or secret("API_URL")
 
 
@@ -35,10 +39,6 @@ def call(fn, *args):
 
 
 # ---------------- caching ----------------
-# Cached calls avoid repeat LLM calls (cost + latency) for a question asked
-# again with the same history, and avoid re-fetching the graph on every
-# rerun. Cleared whenever a fact is added, since answers/graph may change.
-
 @st.cache_data(ttl=3600, show_spinner=False)
 def cached_chat(_backend, message: str, history: tuple[tuple[str, str], ...]):
     history_list = [{"role": r, "content": c} for r, c in history]
@@ -92,6 +92,10 @@ with st.sidebar:
     health = call(backend.health)
     if health:
         st.success(f"{health['nodes']} nodes · {health['edges']} edges")
+        if health.get("persistent"):
+            st.caption("✅ Facts you add are saved permanently (Supabase)")
+        else:
+            st.caption("⚠️ Facts you add are temporary — set SUPABASE_URL/KEY to persist them")
 
     st.header("Add a fact")
     with st.form("add_triple", clear_on_submit=True):
