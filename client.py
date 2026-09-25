@@ -34,14 +34,28 @@ class EmbeddedBackend:
     def __init__(self) -> None:
         from app.guardrails import build_rails
         from app.kg import kg
+        from app.store import SupabaseStore, get_supabase_client
 
         self.kg = kg
         kg.load_json(SEED)
+
+        self.store = None
+        sb = get_supabase_client()
+        if sb:
+            self.store = SupabaseStore(sb)
+            for t in self.store.load_all():
+                kg.add_triple(t["subject"], t["relation"], t["object"])
+
         self.rails = build_rails()
 
     def health(self):
         g = self.kg.export()
-        return {"status": "ok", "nodes": len(g["nodes"]), "edges": len(g["edges"])}
+        return {
+            "status": "ok",
+            "nodes": len(g["nodes"]),
+            "edges": len(g["edges"]),
+            "persistent": self.store is not None,
+        }
 
     def chat(self, message: str, history: list[dict]):
         result = self.rails.generate(messages=history + [{"role": "user", "content": message}])
@@ -53,4 +67,6 @@ class EmbeddedBackend:
 
     def add_triple(self, s: str, r: str, o: str):
         self.kg.add_triple(s, r, o)
-        return {"added": 1}
+        if self.store:
+            self.store.add_triple(s, r, o)
+        return {"added": 1, "persistent": self.store is not None}
