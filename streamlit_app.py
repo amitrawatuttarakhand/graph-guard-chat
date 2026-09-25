@@ -34,6 +34,27 @@ def call(fn, *args):
         return None
 
 
+# ---------------- caching ----------------
+# Cached calls avoid repeat LLM calls (cost + latency) for a question asked
+# again with the same history, and avoid re-fetching the graph on every
+# rerun. Cleared whenever a fact is added, since answers/graph may change.
+
+@st.cache_data(ttl=3600, show_spinner=False)
+def cached_chat(_backend, message: str, history: tuple[tuple[str, str], ...]):
+    history_list = [{"role": r, "content": c} for r, c in history]
+    return _backend.chat(message, history_list)
+
+
+@st.cache_data(ttl=3600, show_spinner=False)
+def cached_graph(_backend):
+    return _backend.graph()
+
+
+def invalidate_cache():
+    cached_chat.clear()
+    cached_graph.clear()
+
+
 def to_dot(graph: dict, highlight: set[str]) -> str:
     esc = lambda s: s.replace('"', '\\"')
     lines = [
@@ -79,6 +100,7 @@ with st.sidebar:
         o = st.text_input("Object", placeholder="Globex")
         if st.form_submit_button("Add") and s and r and o:
             if call(backend.add_triple, s, r, o):
+                invalidate_cache()
                 st.toast("Fact added")
 
     if st.button("Clear chat"):
@@ -104,7 +126,8 @@ with chat_tab:
             st.markdown(prompt)
         with st.chat_message("assistant"):
             with st.spinner("Thinking…"):
-                res = call(backend.chat, prompt, history)
+                history_key = tuple((m["role"], m["content"]) for m in history)
+                res = call(cached_chat, backend, prompt, history_key)
             if res:
                 st.markdown(res["answer"])
                 if res["facts_used"]:
@@ -116,7 +139,7 @@ with chat_tab:
                 )
 
 with graph_tab:
-    graph = call(backend.graph)
+    graph = call(cached_graph, backend)
     if graph:
         if st.session_state.last_entities:
             st.caption("Highlighted: entities from your last question")
