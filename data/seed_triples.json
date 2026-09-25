@@ -9,6 +9,6 @@
   {"subject": "Acme", "relation": "produces", "object": "Widget X"},
   {"subject": "Globex", "relation": "competes with", "object": "Acme"},
   {"subject": "Globex", "relation": "located in", "object": "Munich"},
-  {"subject": "Project Phoenix", "relation": "uses", "object": "Widget X"}
+  {"subject": "Project Phoenix", "relation": "uses", "object": "Widget X"},
   {"subject": "Dave", "relation": "works at", "object": "Globex"}
 ]
