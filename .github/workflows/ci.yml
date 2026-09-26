@@ -8,5 +8,6 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-      - run: pip install networkx pytest
+      - run: pip install networkx pytest presidio-analyzer presidio-anonymizer spacy
+      - run: python -m spacy download en_core_web_sm
       - run: python -m pytest -q
