@@ -34,3 +34,9 @@ def test_input_guard():
 def test_pii_masking():
     out = mask_pii("Mail bob@acme.com or call +49 170 1234567")
     assert "bob@acme.com" not in out and "1234567" not in out
+
+
+def test_pii_masking_catches_names():
+    # Presidio (real NER) catches names too, not just regex patterns.
+    out = mask_pii("My name is John Smith and I live in Berlin.")
+    assert "John Smith" not in out
