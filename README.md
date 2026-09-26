@@ -74,3 +74,14 @@ permanent too, connect a free Supabase (Postgres) project:
 
 Without `SUPABASE_URL`/`SUPABASE_KEY` set, the app runs exactly as before —
 this is fully optional.
+
+
+## PII masking (Presidio)
+Output masking uses Presidio (spaCy-based NER) instead of plain regex, so it
+also catches names, locations, credit card numbers, etc. — not just emails
+and phone numbers. If Presidio or its spaCy model isn't installed, it falls
+back to the original regex-only masking automatically (see `app/checks.py`).
+
+Note: person names used *as the answer* (e.g. "Bob manages Alice") are not
+masked — only names that show up incidentally are. Masking every name would
+break the point of a knowledge-graph assistant.
