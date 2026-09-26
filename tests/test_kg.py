@@ -37,11 +37,6 @@ def test_pii_masking():
 
 
 def test_pii_masking_catches_names():
-    # Only meaningful when the optional Presidio engine (real NER) is
-    # installed; regex-only masking (the default) doesn't catch names.
-    from app.checks import _analyzer
-
-    if _analyzer is None:
-        return
+    # Presidio (real NER) catches names too, not just regex patterns.
     out = mask_pii("My name is John Smith and I live in Berlin.")
     assert "John Smith" not in out
