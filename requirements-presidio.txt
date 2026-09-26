@@ -1,0 +1,10 @@
+# Optional: real NER-based PII masking (names, locations, etc.), not just
+# regex email/phone matching. Adds real install/build time and a slower
+# cold start, so it's opt-in rather than in the default requirements.txt.
+#
+# To enable: append this file's contents to requirements.txt, commit, and
+# redeploy. app/checks.py already falls back to regex automatically if
+# these packages aren't installed — no other code change needed.
+presidio-analyzer>=2.2
+presidio-anonymizer>=2.2
+spacy>=3.7
