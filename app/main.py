@@ -7,9 +7,10 @@ from pydantic import BaseModel, Field
 
 load_dotenv()
 
+from .documents import docs  # noqa: E402
 from .guardrails import build_rails  # noqa: E402
 from .kg import kg  # noqa: E402
-from .store import SupabaseStore, get_supabase_client  # noqa: E402
+from .store import DocumentSupabaseStore, SupabaseStore, get_supabase_client  # noqa: E402
 
 SEED = Path(__file__).resolve().parent.parent / "data" / "seed_triples.json"
 
@@ -18,11 +19,28 @@ SEED = Path(__file__).resolve().parent.parent / "data" / "seed_triples.json"
 async def lifespan(app: FastAPI):
     kg.load_json(SEED)
     app.state.store = None
+    app.state.doc_store = None
     sb = get_supabase_client()
     if sb:
-        app.state.store = SupabaseStore(sb)
-        for t in app.state.store.load_all():
-            kg.add_triple(t["subject"], t["relation"], t["object"])
+        try:
+            candidate = SupabaseStore(sb)
+            for t in candidate.load_all():
+                kg.add_triple(t["subject"], t["relation"], t["object"])
+            app.state.store = candidate
+        except Exception:
+            app.state.store = None
+
+        try:
+            doc_candidate = DocumentSupabaseStore(sb)
+            by_source: dict[str, list[str]] = {}
+            for row in doc_candidate.load_all():
+                by_source.setdefault(row["source"], []).append(row["content"])
+            for source, contents in by_source.items():
+                docs.add_chunks(source, contents)
+            app.state.doc_store = doc_candidate
+        except Exception:
+            app.state.doc_store = None
+
     app.state.rails = build_rails()
     yield
 
@@ -46,6 +64,11 @@ class Triple(BaseModel):
     object: str
 
 
+class Document(BaseModel):
+    filename: str
+    text: str
+
+
 @app.get("/health")
 def health():
     g = kg.export()
@@ -53,7 +76,10 @@ def health():
         "status": "ok",
         "nodes": len(g["nodes"]),
         "edges": len(g["edges"]),
+        "documents": len(docs.summary()),
+        "doc_chunks": len(docs.chunks),
         "persistent": app.state.store is not None,
+        "docs_persistent": app.state.doc_store is not None,
     }
 
 
@@ -65,7 +91,13 @@ async def chat(req: ChatRequest):
     except Exception as e:  # LLM/config errors
         raise HTTPException(status_code=502, detail=f"Guardrails/LLM error: {e}")
     entities, facts = kg.context_for(req.message)
-    return {"answer": result["content"], "entities": entities, "facts_used": facts}
+    doc_chunks = docs.search(req.message)
+    return {
+        "answer": result["content"],
+        "entities": entities,
+        "facts_used": facts,
+        "doc_sources": sorted({c.source for c in doc_chunks}),
+    }
 
 
 @app.get("/kg/graph")
@@ -86,5 +118,24 @@ def add_triples(triples: list[Triple]):
     for t in triples:
         kg.add_triple(t.subject, t.relation, t.object)
         if app.state.store:
-            app.state.store.add_triple(t.subject, t.relation, t.object)
+            try:
+                app.state.store.add_triple(t.subject, t.relation, t.object)
+            except Exception:
+                pass
     return {"added": len(triples), "persistent": app.state.store is not None}
+
+
+@app.post("/documents", status_code=201)
+def add_document(doc: Document):
+    chunks = docs.add_document(doc.filename, doc.text)
+    if app.state.doc_store:
+        try:
+            app.state.doc_store.add_chunks(doc.filename, chunks)
+        except Exception:
+            pass
+    return {"chunks_added": len(chunks), "persistent": app.state.doc_store is not None}
+
+
+@app.get("/documents")
+def list_documents():
+    return {"documents": docs.summary()}
