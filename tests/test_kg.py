@@ -1,6 +1,7 @@
-iifrom pathlib import Path
+from pathlib import Path
 
 from app.checks import is_input_safe, mask_pii
+from app.documents import DocumentStore
 from app.kg import KnowledgeGraph
 
 SEED = Path(__file__).resolve().parent.parent / "data" / "seed_triples.json"
@@ -45,3 +46,26 @@ def test_pii_masking_catches_names():
         return
     out = mask_pii("My name is John Smith and I live in Berlin.")
     assert "John Smith" not in out
+
+
+def test_document_search_finds_relevant_chunk():
+    ds = DocumentStore()
+    ds.add_document("hr.txt", "Employees get 20 days of paid leave per year, accrued monthly. " * 5)
+    ds.add_document("it.txt", "Reset your password via the self-service portal at login.example.com. " * 5)
+    results = ds.search("how many vacation days do I get")
+    assert results and results[0].source == "hr.txt"
+
+
+def test_document_search_unrelated_query_returns_nothing():
+    ds = DocumentStore()
+    ds.add_document("hr.txt", "Employees get 20 days of paid leave per year, accrued monthly. " * 5)
+    assert ds.search("what is the capital of France") == []
+
+
+def test_document_summary_counts_chunks_per_source():
+    ds = DocumentStore()
+    ds.add_document("a.txt", "word " * 2000)  # long enough to span multiple chunks
+    ds.add_document("b.txt", "short doc")
+    summary = ds.summary()
+    assert summary["a.txt"] > 1
+    assert summary["b.txt"] == 1
