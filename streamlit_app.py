@@ -38,7 +38,22 @@ def call(fn, *args):
         return None
 
 
+def extract_text(uploaded_file) -> str:
+    """Plain read for txt/md; pypdf for PDFs."""
+    name = uploaded_file.name.lower()
+    if name.endswith(".pdf"):
+        from pypdf import PdfReader
+
+        reader = PdfReader(uploaded_file)
+        return "\n".join(page.extract_text() or "" for page in reader.pages)
+    return uploaded_file.read().decode("utf-8", errors="ignore")
+
+
 # ---------------- caching ----------------
+# Cached calls avoid repeat LLM calls (cost + latency) for a question asked
+# again with the same history, and avoid re-fetching the graph on every
+# rerun. Cleared whenever a fact/document is added, since answers may change.
+
 @st.cache_data(ttl=3600, show_spinner=False)
 def cached_chat(_backend, message: str, history: tuple[tuple[str, str], ...]):
     history_list = [{"role": r, "content": c} for r, c in history]
@@ -84,6 +99,7 @@ except Exception as e:
 
 st.session_state.setdefault("messages", [])
 st.session_state.setdefault("last_entities", [])
+st.session_state.setdefault("last_doc_sources", [])
 
 # ---------------- sidebar ----------------
 with st.sidebar:
@@ -91,11 +107,15 @@ with st.sidebar:
     st.caption("FastAPI: " + API_URL if API_URL else "Embedded (in-process)")
     health = call(backend.health)
     if health:
-        st.success(f"{health['nodes']} nodes · {health['edges']} edges")
+        st.success(f"{health['nodes']} nodes · {health['edges']} edges · {health.get('documents', 0)} docs")
         if health.get("persistent"):
             st.caption("✅ Facts you add are saved permanently (Supabase)")
         else:
             st.caption("⚠️ Facts you add are temporary — set SUPABASE_URL/KEY to persist them")
+        if health.get("docs_persistent"):
+            st.caption("✅ Documents you upload are saved permanently (Supabase)")
+        else:
+            st.caption("⚠️ Documents you upload are temporary — set SUPABASE_URL/KEY to persist them")
 
     st.header("Add a fact")
     with st.form("add_triple", clear_on_submit=True):
@@ -110,10 +130,11 @@ with st.sidebar:
     if st.button("Clear chat"):
         st.session_state.messages = []
         st.session_state.last_entities = []
+        st.session_state.last_doc_sources = []
         st.rerun()
 
 # ---------------- tabs ----------------
-chat_tab, graph_tab = st.tabs(["💬 Chat", "🕸️ Knowledge graph"])
+chat_tab, graph_tab, docs_tab = st.tabs(["💬 Chat", "🕸️ Knowledge graph", "📄 Documents"])
 
 with chat_tab:
     for m in st.session_state.messages:
@@ -122,8 +143,10 @@ with chat_tab:
             if m.get("facts"):
                 with st.expander(f"Facts used ({len(m['facts'])})"):
                     st.markdown("\n".join(f"- {f}" for f in m["facts"]))
+            if m.get("doc_sources"):
+                st.caption("📄 From: " + ", ".join(m["doc_sources"]))
 
-    if prompt := st.chat_input("Ask about people, companies, projects…"):
+    if prompt := st.chat_input("Ask about people, companies, projects, or your uploaded documents…"):
         history = [{"role": m["role"], "content": m["content"]} for m in st.session_state.messages]
         st.session_state.messages.append({"role": "user", "content": prompt})
         with st.chat_message("user"):
@@ -137,9 +160,17 @@ with chat_tab:
                 if res["facts_used"]:
                     with st.expander(f"Facts used ({len(res['facts_used'])})"):
                         st.markdown("\n".join(f"- {f}" for f in res["facts_used"]))
+                if res.get("doc_sources"):
+                    st.caption("📄 From: " + ", ".join(res["doc_sources"]))
                 st.session_state.last_entities = res["entities"]
+                st.session_state.last_doc_sources = res.get("doc_sources", [])
                 st.session_state.messages.append(
-                    {"role": "assistant", "content": res["answer"], "facts": res["facts_used"]}
+                    {
+                        "role": "assistant",
+                        "content": res["answer"],
+                        "facts": res["facts_used"],
+                        "doc_sources": res.get("doc_sources", []),
+                    }
                 )
 
 with graph_tab:
@@ -150,3 +181,25 @@ with graph_tab:
         st.graphviz_chart(to_dot(graph, set(st.session_state.last_entities)))
         with st.expander("Raw triples"):
             st.dataframe(graph["edges"])
+
+with docs_tab:
+    st.caption("Upload text, markdown, or PDF files. The assistant will search them to answer questions.")
+    uploaded = st.file_uploader("Upload a document", type=["txt", "md", "pdf"])
+    if uploaded is not None:
+        if st.button(f"Add '{uploaded.name}'"):
+            text = extract_text(uploaded)
+            if not text.strip():
+                st.error("Couldn't extract any text from that file.")
+            else:
+                r = call(backend.add_document, uploaded.name, text)
+                if r:
+                    invalidate_cache()
+                    st.success(f"Added {r['chunks_added']} chunk(s) from '{uploaded.name}'.")
+
+    doc_list = call(backend.list_documents)
+    if doc_list and doc_list.get("documents"):
+        st.subheader("Uploaded documents")
+        for name, count in doc_list["documents"].items():
+            st.write(f"- **{name}** — {count} chunk(s)")
+    else:
+        st.caption("No documents uploaded yet.")
