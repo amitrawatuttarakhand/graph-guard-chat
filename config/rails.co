@@ -10,8 +10,8 @@ define flow check input safety
     bot refuse to respond
     stop
 
-define flow retrieve kg context
-  $relevant_chunks = execute retrieve_kg_context(query=$user_message)
+define flow retrieve context
+  $relevant_chunks = execute retrieve_context(query=$user_message)
   if not $relevant_chunks
     bot no kg data
     stop
