@@ -75,13 +75,42 @@ permanent too, connect a free Supabase (Postgres) project:
 Without `SUPABASE_URL`/`SUPABASE_KEY` set, the app runs exactly as before —
 this is fully optional.
 
+## PII masking: regex (default) or Presidio (optional, real NER)
+By default, output masking uses simple regex for emails and phone numbers —
+fast to install, fast to start. Optionally, `app/checks.py` can use Presidio
+(spaCy-based NER) instead, which also catches names, locations, credit card
+numbers, etc.
 
-## PII masking (Presidio)
-Output masking uses Presidio (spaCy-based NER) instead of plain regex, so it
-also catches names, locations, credit card numbers, etc. — not just emails
-and phone numbers. If Presidio or its spaCy model isn't installed, it falls
-back to the original regex-only masking automatically (see `app/checks.py`).
+Presidio is NOT in `requirements.txt` by default because it adds real build
+time and a slower cold start. To enable it: append the contents of
+`requirements-presidio.txt` to `requirements.txt`, commit, and redeploy — no
+other code change needed, since `app/checks.py` auto-detects whether it's
+installed and falls back to regex if not.
 
 Note: person names used *as the answer* (e.g. "Bob manages Alice") are not
 masked — only names that show up incidentally are. Masking every name would
 break the point of a knowledge-graph assistant.
+
+## Document upload (RAG)
+The 📄 Documents tab lets you upload .txt/.md/.pdf files. Uploaded text is
+split into chunks and searched with TF-IDF (not neural embeddings — kept
+deliberately lightweight so it doesn't slow deploys the way Presidio did;
+see `app/documents.py`). Matching chunks are merged with graph facts into
+one context block before every answer, so questions can draw on both.
+
+By default uploaded documents are temporary, same as facts added via the
+sidebar (see "Permanent storage" above). To persist them too, add a second
+table in the same Supabase project:
+    create table documents (
+      id bigint generated always as identity primary key,
+      source text not null,
+      chunk_index int not null,
+      content text not null,
+      created_at timestamptz default now(),
+      unique (source, chunk_index)
+    );
+    alter table documents enable row level security;
+    create policy "public read" on documents for select using (true);
+    create policy "public insert" on documents for insert with check (true);
+    create policy "public upsert" on documents for update using (true);
+No new secrets needed — it reuses the same `SUPABASE_URL`/`SUPABASE_KEY`.
