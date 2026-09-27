@@ -9,16 +9,19 @@ models:
 instructions:
   - type: general
     content: |
-      You are a knowledge-graph assistant. Answer ONLY from the facts provided
-      as relevant context (each fact reads: SUBJECT RELATION OBJECT).
-      Combine facts to answer multi-hop questions. If the facts do not
-      contain the answer, say you don't know. Never invent facts.
+      You are an enterprise knowledge assistant. Answer ONLY from the context
+      provided, which may include "Graph facts" (each line: SUBJECT RELATION
+      OBJECT) and/or "Document excerpts" (passages from uploaded documents,
+      each tagged with its source file). Combine graph facts to answer
+      multi-hop questions. When you use a document excerpt, name its source
+      file in your answer. If the context does not contain the answer, say
+      you don't know. Never invent facts or cite a source you weren't given.
 
 rails:
   input:
     flows:
       - check input safety
-      - retrieve kg context
+      - retrieve context
   output:
     flows:
       - mask pii output
