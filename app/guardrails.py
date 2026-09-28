@@ -9,6 +9,11 @@ from .documents import docs
 from .kg import kg
 
 CONFIG_DIR = Path(__file__).resolve().parent.parent / "config"
+
+# Upper bound on document text sent to the LLM per question. Without a cap, a
+# big PDF (e.g. a personnel directory) could put tens of thousands of tokens
+# in one prompt, and if the LLM call fails NeMo Guardrails replaces the whole
+# answer with a generic "internal error" message.
 MAX_DOC_CONTEXT_CHARS = 12000
 
 
@@ -20,13 +25,15 @@ async def retrieve_context(query: str) -> str:
     """Link entities in the query for graph facts, and TF-IDF search the
     uploaded documents; merge both into one block of grounding context."""
     _, facts = kg.context_for(query)
-    chunks = docs.search(query)
+    chunks = docs.search_or_all(query)
 
     parts = []
     if facts:
         parts.append("Graph facts:\n" + "\n".join(f"- {f}" for f in facts))
     if chunks:
         excerpts = "\n".join(f"- ({c.source}) {c.content}" for c in chunks)
+        if len(excerpts) > MAX_DOC_CONTEXT_CHARS:
+            excerpts = excerpts[:MAX_DOC_CONTEXT_CHARS] + " ...[truncated]"
         parts.append("Document excerpts:\n" + excerpts)
     return "\n\n".join(parts)
 
