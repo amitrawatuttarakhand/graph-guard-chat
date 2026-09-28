@@ -11,7 +11,7 @@ from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
 
 
-def chunk_text(text: str, chunk_size: int = 800, overlap: int = 150) -> list[str]:
+def chunk_text(text: str, chunk_size: int = 200, overlap: int = 40) -> list[str]:
     """Split on whitespace into overlapping word-count windows."""
     words = text.split()
     if not words:
@@ -60,13 +60,23 @@ class DocumentStore:
         self.add_chunks(source, pieces)
         return pieces
 
-    def search(self, query: str, top_k: int = 3, min_score: float = 0.05) -> list[Chunk]:
+    def search(self, query: str, top_k: int = 5, min_score: float = 0.02) -> list[Chunk]:
         if not self.chunks or self._vectorizer is None:
             return []
         q_vec = self._vectorizer.transform([query])
         scores = cosine_similarity(q_vec, self._matrix)[0]
         ranked = sorted(range(len(scores)), key=lambda i: scores[i], reverse=True)
         return [self.chunks[i] for i in ranked[:top_k] if scores[i] >= min_score]
+
+    def search_or_all(self, query: str, top_k: int = 5, min_score: float = 0.02, max_fallback_chunks: int = 5) -> list[Chunk]:
+        """Like search(), but if keyword matching finds nothing (e.g. a broad
+        question like "list everything" or "summarize this" that shares no
+        vocabulary with the text), fall back to returning every chunk, up to
+        a cap, rather than silently finding nothing."""
+        hits = self.search(query, top_k=top_k, min_score=min_score)
+        if hits or not self.chunks:
+            return hits
+        return self.chunks[:max_fallback_chunks]
 
     def summary(self) -> dict[str, int]:
         """Filename -> chunk count, for display in the UI."""
