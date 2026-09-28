@@ -9,6 +9,7 @@ from .documents import docs
 from .kg import kg
 
 CONFIG_DIR = Path(__file__).resolve().parent.parent / "config"
+MAX_DOC_CONTEXT_CHARS = 12000
 
 
 async def check_input_safety(text: str) -> bool:
